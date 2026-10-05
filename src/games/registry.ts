@@ -1,3 +1,4 @@
+import { crossmath } from "./crossmath/Crossmath";
 import { queens } from "./queens/Queens";
 import { riddle } from "./riddle/Riddle";
 import { sudoku } from "./sudoku/Sudoku";
@@ -11,4 +12,5 @@ export const GAMES: Record<string, GameDefinition<unknown>> = {
   riddle,
   sudoku,
   queens,
+  crossmath,
 };

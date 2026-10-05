@@ -62,14 +62,121 @@ exactly one solution**. Check it with `npm run check-puzzle -- file.json`.
 
 ## crossmath
 
-Coming later.
+| | Shape | Example |
+|---|---|---|
+| `data` | `{ "cells": Token[][], "pool": number[] }`. At most 8 rows and 8 columns. | see below |
+| answer (sent by the site) | `number[]`: the value in each blank, in **reading order** (top row first, left to right) | `[8,3,5,2,9,1,6,4,7]` |
+| `solution` | the same shape as the answer | `[8,3,5,2,9,1,6,4,7]` |
+
+Each cell token is one of:
+
+| Token | Meaning | Shown as |
+|---|---|---|
+| `null` | gap (no cell) | empty space |
+| whole number, e.g. `12` | fixed number | parchment number |
+| `"_"` | blank the player fills from the pool | outlined cell |
+| `"+"` `"-"` `"*"` `"/"` | operator | + − × ÷ |
+| `"="` | equals | = |
+
+- **Equations:** every horizontal or vertical run of 2 or more adjacent cells is one equation,
+  shaped `number op number op … = number`. A blank can stand anywhere a number can, including
+  after the `=`.
+- **Order of operations:** × and ÷ come before + and −, worked left to right within each
+  level. Every division step must be exact (no fractions at any step). For example,
+  `6 + 4 × 7 = 34`.
+- **Pool:** the numbers for the blanks. These must be whole numbers 1 and up, with exactly
+  as many as there are blanks. Each pool entry is used once. Duplicates like `[4, 4]` are fine,
+  and the site tracks each chip separately.
+- **Rejected by the checker:** a cell that belongs to no equation, a fixed `0` after `/`,
+  or a grid larger than 8×8. (At 8 columns, cells stay about 40px wide on a 360px phone.)
+- The rules live in one file, `src/games/crossmath/logic.mjs`. Both the site's live
+  green/red equation check and the scripts below use it.
+
+Example (`scripts/examples/crossmath.json`):
+
+```json
+{
+  "cells": [
+    ["_", "+", "_", "-", "_", "=", 6],
+    ["-", null, "*", null, "+", null, null],
+    ["_", "*", "_", "-", "_", "=", 17],
+    ["+", null, "-", null, "*", null, null],
+    ["_", "+", "_", "*", "_", "=", 34],
+    ["=", null, "=", null, "=", null, null],
+    [12, null, 23, null, 12, null, null]
+  ],
+  "pool": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+}
+```
+
+Solution: `[8, 3, 5, 2, 9, 1, 6, 4, 7]`.
+
+**On the site**, the player taps a blank, then taps a number chip below the grid. Tapping a
+chip that's already placed moves it to the selected blank (swapping), and ⌫ takes a number
+back. A finished equation is outlined green if it's right and red if it's wrong. Submit
+unlocks once every blank is filled and nothing is red.
+
+### Making a crossmath puzzle: `npm run make-crossmath`
+
+Writing result numbers by hand and then checking uniqueness is slow. Instead, describe the
+**layout** and let the script pick the numbers:
+
+```json
+{
+  "layout": [
+    ["_", "+", "_", "-", "_", "=", "#"],
+    ["-", null, "*", null, "+", null, null],
+    ["_", "*", "_", "-", "_", "=", "#"],
+    ["+", null, "-", null, "*", null, null],
+    ["_", "+", "_", "*", "_", "=", "#"],
+    ["=", null, "=", null, "=", null, null],
+    ["#", null, "#", null, "#", null, null]
+  ],
+  "pool": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  "tries": 5000,
+  "seed": 7,
+  "allowNegative": false,
+  "maxResult": 999
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `layout` | Same tokens as `cells`, plus `"#"`: a result number for the script to compute. A `"#"` must be the number right after an `=` and belong to only one equation. Fixed numbers are allowed too. |
+| `pool` | The numbers for the blanks (whole numbers 1 and up, one per blank). |
+| `tries` | Optional. How many random fillings to try (default 5000). |
+| `seed` | Optional. Repeats a previous run exactly. Each run prints its seed. |
+| `allowNegative` | Optional. Allow negative result numbers (default `false`). |
+| `maxResult` | Optional. Largest allowed result number (default 999). |
+
+```bash
+npm run -s make-crossmath -- scripts/examples/crossmath-layout.json > my-puzzle.json
+```
+
+The script places the pool in random orders. For each order, it computes every `"#"`, skips
+fillings with inexact division or out-of-range results, and keeps the first finished puzzle
+with **exactly one** solution. The puzzle JSON goes to stdout, in the same format
+`check-puzzle` reads. The solution in reading order goes to the terminal. If nothing is found,
+try more `tries`, a different pool, more × and ÷ (they pin numbers down), or turn a blank into
+a fixed number.
+
+### Tests
+
+`npm test` runs `scripts/crossmath.test.mjs` against the shared rules. The tests check:
+
+- The example filled correctly satisfies every equation.
+- Swapping two numbers in the example breaks it.
+- The example's solution is unique.
+- Order of operations and exact division.
+- Swappable placements count as two solutions, but equal numbers swapping does not.
+- The validator rejects 0 or negatives in a pool, a fixed 0 divisor, and grids over 8×8.
 
 ---
 
 ## Checking uniqueness (dev only)
 
 The server compares grid answers by exact equality. If a puzzle has two solutions, a player
-who finds the "other" one is marked wrong. Before inserting a sudoku or queens puzzle, save
+who finds the "other" one is marked wrong. Before inserting a sudoku, queens or crossmath puzzle, save
 it as JSON and run the checker:
 
 ```json
@@ -83,4 +190,6 @@ npm run check-puzzle -- scripts/examples/queens.json
 - `solution` is optional. If you include it, the checker confirms it is the unique solution.
 - The checker prints the solution to paste into `puzzle_solutions.solution`.
 - Exit code `0` means OK; `1` means a problem, with an explanation.
-- `scripts/examples/` has one valid example of each type.
+- `scripts/examples/` has one valid example of each type, plus `crossmath-layout.json` for `make-crossmath`.
+- For crossmath, the search checks each equation as soon as its blanks are filled. A puzzle
+  with about 15 blanks takes well under a second.

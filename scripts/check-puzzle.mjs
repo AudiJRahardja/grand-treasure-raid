@@ -15,6 +15,7 @@
 
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { solveCrossmath, validateCrossmath } from "../src/games/crossmath/logic.mjs";
 
 // ---------------------------------------------------------------- sudoku
 
@@ -158,215 +159,7 @@ export function solveQueens({ size: n, regions }, limit = 2) {
 }
 
 // ---------------------------------------------------------------- crossmath
-//
-// data.cells is a grid of tokens:
-//   null            gap (no cell)
-//   integer         fixed number
-//   "_"             blank the player fills
-//   "+" "-" "*" "/" operator (shown as + − × ÷)
-//   "="             equals
-// Every horizontal or vertical run of 2+ adjacent cells is one equation:
-//   operand (op operand)* = operand      (operand = integer or "_")
-// Normal precedence (× ÷ before + −); division must be exact.
-// Blanks take numbers from data.pool (each pool entry used exactly once), or,
-// with no pool, any integer in data.range [min, max].
-
-const OPS = new Set(["+", "-", "*", "/"]);
-const isOperand = (t) => t === "_" || Number.isInteger(t);
-
-/** Splits the grid into equations. Each token is { t, blank? } where blank is the blank's index. */
-export function parseCrossmath(cells) {
-  const blanks = []; // [row, col] in reading order
-  const blankIndex = new Map();
-  cells.forEach((row, r) =>
-    row.forEach((t, c) => {
-      if (t === "_") {
-        blankIndex.set(`${r},${c}`, blanks.length);
-        blanks.push([r, c]);
-      }
-    }),
-  );
-
-  const equations = [];
-  const covered = new Set();
-  const rows = cells.length;
-  const cols = cells[0].length;
-  const scan = (dir) => {
-    const outer = dir === "row" ? rows : cols;
-    const inner = dir === "row" ? cols : rows;
-    for (let i = 0; i < outer; i++) {
-      let run = [];
-      const flush = () => {
-        if (run.length >= 2) equations.push({ dir, cells: run });
-        run = [];
-      };
-      for (let j = 0; j <= inner; j++) {
-        const [r, c] = dir === "row" ? [i, j] : [j, i];
-        const t = j < inner ? cells[r][c] : null;
-        if (t === null) flush();
-        else run.push([r, c]);
-      }
-    }
-  };
-  scan("row");
-  scan("col");
-
-  for (const eq of equations) {
-    eq.tokens = eq.cells.map(([r, c]) => {
-      covered.add(`${r},${c}`);
-      const t = cells[r][c];
-      return t === "_" ? { t, blank: blankIndex.get(`${r},${c}`) } : { t };
-    });
-  }
-  return { blanks, equations, covered };
-}
-
-/** Returns an error string, or null if data is a well-formed crossmath. */
-export function validateCrossmath(data) {
-  const cells = data?.cells;
-  if (!Array.isArray(cells) || cells.length < 1 || cells.length > 12) return "data.cells must have 1 to 12 rows";
-  const width = cells[0]?.length;
-  if (!Number.isInteger(width) || width < 3 || width > 12) return "each row must have 3 to 12 cells";
-  for (let r = 0; r < cells.length; r++) {
-    if (!Array.isArray(cells[r]) || cells[r].length !== width) return `row ${r} must have ${width} cells`;
-    for (let c = 0; c < width; c++) {
-      const t = cells[r][c];
-      if (!(t === null || t === "=" || OPS.has(t) || isOperand(t))) {
-        return `cell [${r}][${c}] must be null, an integer, "_", "+", "-", "*", "/" or "=" (got ${JSON.stringify(t)})`;
-      }
-    }
-  }
-
-  const { blanks, equations, covered } = parseCrossmath(cells);
-  if (blanks.length === 0) return "there are no blanks (\"_\") to fill";
-  for (const eq of equations) {
-    const where = `${eq.dir} equation starting at [${eq.cells[0]}]`;
-    const ts = eq.tokens.map((x) => x.t);
-    const eqAt = ts.indexOf("=");
-    if (eqAt === -1 || ts.lastIndexOf("=") !== eqAt) return `${where} needs exactly one "="`;
-    if (eqAt !== ts.length - 2) return `${where}: "=" must be followed by exactly one number or blank`;
-    for (let i = 0; i < eqAt; i++) {
-      const wantOperand = i % 2 === 0;
-      if (wantOperand ? !isOperand(ts[i]) : !OPS.has(ts[i])) {
-        return `${where}: expected ${wantOperand ? "a number or blank" : "an operator"} at position ${i + 1}`;
-      }
-    }
-    if (eqAt % 2 !== 1) return `${where}: the left side must end with a number or blank`;
-    if (!isOperand(ts.at(-1))) return `${where}: must end with a number or blank`;
-  }
-  for (let r = 0; r < cells.length; r++) {
-    for (let c = 0; c < width; c++) {
-      if (cells[r][c] !== null && !covered.has(`${r},${c}`)) {
-        return `cell [${r}][${c}] is not part of any equation`;
-      }
-    }
-  }
-
-  if (data.pool !== undefined) {
-    if (!Array.isArray(data.pool) || !data.pool.every(Number.isInteger)) return "data.pool must be an array of integers";
-    if (data.pool.length !== blanks.length) {
-      return `data.pool has ${data.pool.length} numbers but there are ${blanks.length} blanks`;
-    }
-  } else {
-    const range = data.range;
-    if (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isInteger) || range[0] > range[1]) {
-      return "give either data.pool (numbers to place) or data.range [min, max]";
-    }
-    if (range[1] - range[0] > 999) return "data.range is too wide (max 1000 values)";
-  }
-  return null;
-}
-
-/** Value of `a op b op c ...` with × ÷ before + −, or null if a division isn't exact. */
-export function evaluate(values, ops) {
-  const terms = [values[0]];
-  const signs = [1];
-  for (let i = 0; i < ops.length; i++) {
-    const v = values[i + 1];
-    if (ops[i] === "*") terms[terms.length - 1] *= v;
-    else if (ops[i] === "/") {
-      const last = terms[terms.length - 1];
-      if (v === 0 || last % v !== 0) return null;
-      terms[terms.length - 1] = last / v;
-    } else {
-      terms.push(v);
-      signs.push(ops[i] === "+" ? 1 : -1);
-    }
-  }
-  return terms.reduce((sum, t, i) => sum + signs[i] * t, 0);
-}
-
-/** True if an equation holds, given values for all blanks. */
-export function equationHolds(tokens, blankValues) {
-  const val = (x) => (x.t === "_" ? blankValues[x.blank] : x.t);
-  const left = tokens.slice(0, -2);
-  const values = left.filter((_, i) => i % 2 === 0).map(val);
-  const ops = left.filter((_, i) => i % 2 === 1).map((x) => x.t);
-  const result = evaluate(values, ops);
-  return result !== null && result === val(tokens.at(-1));
-}
-
-/** Finds up to `limit` solutions: arrays of blank values in reading order. */
-export function solveCrossmath(data, limit = 2) {
-  const { blanks, equations } = parseCrossmath(data.cells);
-  const n = blanks.length;
-  const eqBlanks = equations.map((eq) => [...new Set(eq.tokens.filter((x) => x.t === "_").map((x) => x.blank))]);
-
-  // Fill blanks so equations complete as early as possible (prunes the search)
-  const order = [];
-  const placed = new Set();
-  while (order.length < n) {
-    let best = -1;
-    let bestScore = Infinity;
-    for (let b = 0; b < n; b++) {
-      if (placed.has(b)) continue;
-      const score = Math.min(
-        ...eqBlanks.map((bs) => (bs.includes(b) ? bs.filter((x) => !placed.has(x)).length : Infinity)),
-      );
-      if (score < bestScore) [best, bestScore] = [b, score];
-    }
-    order.push(best);
-    placed.add(best);
-  }
-  // Equations to check right after the k-th blank in `order` is placed
-  const position = new Map(order.map((b, k) => [b, k]));
-  const checkAt = Array.from({ length: n }, () => []);
-  equations.forEach((eq, i) => {
-    const last = Math.max(-1, ...eqBlanks[i].map((b) => position.get(b)));
-    if (last >= 0) checkAt[last].push(eq);
-  });
-  // Equations without blanks must already hold
-  if (equations.some((eq, i) => eqBlanks[i].length === 0 && !equationHolds(eq.tokens, []))) {
-    return { solutions: [], error: "an equation with no blanks is false" };
-  }
-
-  const counts = new Map();
-  if (data.pool) data.pool.forEach((v) => counts.set(v, (counts.get(v) ?? 0) + 1));
-  const candidates = data.pool
-    ? () => [...counts.keys()].filter((v) => counts.get(v) > 0)
-    : () => Array.from({ length: data.range[1] - data.range[0] + 1 }, (_, i) => data.range[0] + i);
-
-  const values = new Array(n).fill(null);
-  const solutions = [];
-  const search = (k) => {
-    if (solutions.length >= limit) return;
-    if (k === n) {
-      solutions.push([...values]);
-      return;
-    }
-    const b = order[k];
-    for (const v of candidates()) {
-      values[b] = v;
-      if (data.pool) counts.set(v, counts.get(v) - 1);
-      if (checkAt[k].every((eq) => equationHolds(eq.tokens, values))) search(k + 1);
-      if (data.pool) counts.set(v, counts.get(v) + 1);
-      if (solutions.length >= limit) break;
-    }
-    values[b] = null;
-  };
-  search(0);
-  return { solutions };
-}
+// The rules live in one file shared with the site: src/games/crossmath/logic.mjs
 
 // ---------------------------------------------------------------- CLI
 
@@ -413,7 +206,7 @@ function main(path) {
     console.error("✖ More than one solution. Two of them:");
     console.error(`  ${JSON.stringify(solutions[0])}`);
     console.error(`  ${JSON.stringify(solutions[1])}`);
-    const advice = { sudoku: "Add more givens.", queens: "Reshape the regions.", crossmath: "Turn a blank into a given number, or change the pool." };
+    const advice = { sudoku: "Add more givens.", queens: "Reshape the regions.", crossmath: "Turn a blank into a fixed number, change the pool, or try npm run make-crossmath." };
     console.error(`  ${advice[input.type]}`);
     return 1;
   }
