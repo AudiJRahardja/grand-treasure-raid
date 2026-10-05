@@ -2,27 +2,19 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Countdown } from "@/components/Countdown";
 import { ErrorNotice, InfoNotice } from "@/components/Notice";
 import { logQuery } from "@/lib/debug";
 import { getCurrentEvent, type EventStatus } from "@/lib/events";
 import { createClient } from "@/lib/supabase/server";
 import { formatDuration, formatWIB } from "@/lib/time";
+import { PUZZLE_COLUMNS, type ProgressRow, type PuzzleMeta, type ScheduleRow } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Puzzles" };
 
-// Explicit columns only: players are not granted the `data` column.
-const PUZZLE_COLUMNS = "id, event_id, checkpoint_number, type, title, opens_at, points";
-
-type PuzzleRow = {
-  id: number;
-  event_id: number;
-  checkpoint_number: number;
-  type: string;
-  title: string;
-  opens_at: string;
-  points: number;
-};
-type ProgressRow = { puzzle_id: number; opened_at: string; solved_at: string | null; solve_seconds: number | null };
+type Card =
+  | { kind: "open"; checkpoint: number; puzzle: PuzzleMeta }
+  | { kind: "locked"; checkpoint: number; opensAt: string };
 
 export default async function PuzzlesPage() {
   const supabase = await createClient();
@@ -49,19 +41,20 @@ export default async function PuzzlesPage() {
     );
   }
 
-  // RLS only returns puzzles whose opens_at has passed
-  const puzzlesRes = await supabase
-    .from("puzzles")
-    .select(PUZZLE_COLUMNS)
-    .eq("event_id", event.id)
-    .order("checkpoint_number", { ascending: true });
+  const [puzzlesRes, progressRes, scheduleRes] = await Promise.all([
+    // RLS only returns puzzles whose opens_at has passed
+    supabase
+      .from("puzzles")
+      .select(PUZZLE_COLUMNS)
+      .eq("event_id", event.id)
+      .order("checkpoint_number", { ascending: true }),
+    supabase.from("progress").select("puzzle_id, opened_at, solved_at, solve_seconds").eq("user_id", userId),
+    // Checkpoint numbers + unlock times only (migration 001)
+    supabase.rpc("checkpoint_schedule", { p_event_id: event.id }),
+  ]);
   logQuery(`puzzles (${PUZZLE_COLUMNS}) where event_id=${event.id}`, puzzlesRes);
-
-  const progressRes = await supabase
-    .from("progress")
-    .select("puzzle_id, opened_at, solved_at, solve_seconds")
-    .eq("user_id", userId);
   logQuery("progress (own rows)", progressRes);
+  logQuery(`rpc checkpoint_schedule(${event.id})`, scheduleRes);
 
   const error = puzzlesRes.error ?? progressRes.error;
   if (error) {
@@ -72,14 +65,29 @@ export default async function PuzzlesPage() {
     );
   }
 
-  const puzzles = (puzzlesRes.data ?? []) as PuzzleRow[];
+  const puzzles = (puzzlesRes.data ?? []) as PuzzleMeta[];
+  const schedule = scheduleRes.error ? [] : ((scheduleRes.data ?? []) as ScheduleRow[]);
   const progress = new Map(((progressRes.data ?? []) as ProgressRow[]).map((p) => [p.puzzle_id, p]));
+
+  const openNumbers = new Set(puzzles.map((p) => p.checkpoint_number));
+  const cards: Card[] = [
+    ...puzzles.map((p): Card => ({ kind: "open", checkpoint: p.checkpoint_number, puzzle: p })),
+    ...schedule
+      .filter((s) => !openNumbers.has(s.checkpoint_number))
+      .map((s): Card => ({ kind: "locked", checkpoint: s.checkpoint_number, opensAt: s.opens_at })),
+  ].sort((a, b) => a.checkpoint - b.checkpoint);
 
   return (
     <Shell eventName={event.name}>
       <EventStatusLine status={status} startsAt={event.starts_at} endsAt={event.ends_at} />
 
-      {puzzles.length === 0 ? (
+      {scheduleRes.error && (
+        <ErrorNotice title="Upcoming unlock times unavailable">
+          {scheduleRes.error.message}. Open checkpoints still work. (Has migration 001 been run?)
+        </ErrorNotice>
+      )}
+
+      {cards.length === 0 ? (
         <InfoNotice title="No checkpoints open yet">
           {status === "upcoming"
             ? `The raid starts ${formatWIB(event.starts_at)}.`
@@ -87,9 +95,13 @@ export default async function PuzzlesPage() {
         </InfoNotice>
       ) : (
         <ol className="flex flex-col gap-3">
-          {puzzles.map((p) => (
-            <li key={p.id}>
-              <PuzzleCard puzzle={p} progress={progress.get(p.id)} ended={status === "ended"} />
+          {cards.map((c) => (
+            <li key={c.checkpoint}>
+              {c.kind === "open" ? (
+                <PuzzleCard puzzle={c.puzzle} progress={progress.get(c.puzzle.id)} ended={status === "ended"} />
+              ) : (
+                <LockedCard checkpoint={c.checkpoint} opensAt={c.opensAt} />
+              )}
             </li>
           ))}
         </ol>
@@ -120,7 +132,20 @@ function EventStatusLine({ status, startsAt, endsAt }: { status: EventStatus; st
   return <p className="text-sm text-muted">{text}</p>;
 }
 
-function PuzzleCard({ puzzle, progress, ended }: { puzzle: PuzzleRow; progress?: ProgressRow; ended: boolean }) {
+function CheckpointBadge({ n, locked = false }: { n: number; locked?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full border font-display text-2xl ${
+        locked ? "border-rope text-muted" : "border-gold/50 text-gold"
+      }`}
+    >
+      {locked ? "🔒" : n}
+    </span>
+  );
+}
+
+function PuzzleCard({ puzzle, progress, ended }: { puzzle: PuzzleMeta; progress?: ProgressRow; ended: boolean }) {
   const solved = progress?.solved_at != null;
   const started = progress != null && !solved;
 
@@ -137,12 +162,7 @@ function PuzzleCard({ puzzle, progress, ended }: { puzzle: PuzzleRow; progress?:
       href={`/puzzles/${puzzle.id}`}
       className="card flex min-h-20 items-center gap-4 transition hover:border-gold/60 focus-visible:outline-2 focus-visible:outline-gold"
     >
-      <span
-        aria-hidden="true"
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gold/50 font-display text-2xl text-gold"
-      >
-        {puzzle.checkpoint_number}
-      </span>
+      <CheckpointBadge n={puzzle.checkpoint_number} />
       <span className="min-w-0 flex-1">
         <span className="block text-xs uppercase tracking-wide text-muted">
           Checkpoint {puzzle.checkpoint_number} · {puzzle.type}
@@ -154,5 +174,21 @@ function PuzzleCard({ puzzle, progress, ended }: { puzzle: PuzzleRow; progress?:
       </span>
       <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${badge.cls}`}>{badge.text}</span>
     </Link>
+  );
+}
+
+function LockedCard({ checkpoint, opensAt }: { checkpoint: number; opensAt: string }) {
+  return (
+    <div className="card flex min-h-20 items-center gap-4 opacity-80">
+      <CheckpointBadge n={checkpoint} locked />
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-semibold">Checkpoint {checkpoint}</span>
+        <span className="block text-sm text-muted">Opens {formatWIB(opensAt)}</span>
+      </span>
+      <span className="shrink-0 rounded-full bg-rope/40 px-3 py-1 text-xs font-semibold text-muted">
+        <span className="sr-only">Locked, opens in </span>
+        <Countdown to={opensAt} refreshOnDone />
+      </span>
+    </div>
   );
 }
