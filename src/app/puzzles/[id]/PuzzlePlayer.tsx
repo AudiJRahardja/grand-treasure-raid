@@ -172,7 +172,12 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
           This checkpoint&apos;s data doesn&apos;t match the {phase.puzzle.type} format. Tell the organizer.
         </ErrorNotice>
       ) : (
-        <game.Component data={phase.puzzle.data} onSubmit={handleSubmit} submit={{ pending, cooldownLeft }} />
+        <game.Component
+          puzzleId={puzzleId}
+          data={phase.puzzle.data}
+          onSubmit={handleSubmit}
+          submit={{ pending, cooldownLeft }}
+        />
       )}
 
       {feedback && (

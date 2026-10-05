@@ -1,4 +1,6 @@
+import { queens } from "./queens/Queens";
 import { riddle } from "./riddle/Riddle";
+import { sudoku } from "./sudoku/Sudoku";
 import type { GameDefinition } from "./types";
 
 /**
@@ -7,4 +9,6 @@ import type { GameDefinition } from "./types";
  */
 export const GAMES: Record<string, GameDefinition<unknown>> = {
   riddle,
+  sudoku,
+  queens,
 };

@@ -10,6 +10,8 @@ export type SubmitState = {
 
 /** Every game component receives exactly this. */
 export type GameProps<D> = {
+  /** For keying saved in-progress state (see useSavedState) */
+  puzzleId: number;
   /** The puzzle's `data` JSON, already checked by `isData` */
   data: D;
   /** Send the answer JSON; the page passes it to submit_answer */

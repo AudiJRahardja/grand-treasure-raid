@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check-puzzle": "node scripts/check-puzzle.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
