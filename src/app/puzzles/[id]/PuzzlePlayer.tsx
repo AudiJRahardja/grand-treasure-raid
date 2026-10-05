@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Countdown, ElapsedTimer } from "@/components/Countdown";
 import { ErrorNotice } from "@/components/Notice";
@@ -51,7 +51,31 @@ async function startPuzzle(puzzleId: number): Promise<Phase> {
   return { name: "playing", puzzle: data as StartedPuzzle };
 }
 
-export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, remaining, scheduleKnown }: Props) {
+/**
+ * Wraps the player with one always-present live region, so screen readers hear
+ * "Not quite…", cooldowns and "Treasure found!" even as the page content swaps.
+ */
+export function PuzzlePlayer(props: Props) {
+  const [live, setLive] = useState("");
+  return (
+    <>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {live}
+      </p>
+      <PlayerPhases {...props} announce={setLive} />
+    </>
+  );
+}
+
+function PlayerPhases({
+  puzzleId,
+  started,
+  solvedSeconds,
+  cooldownUntil,
+  remaining,
+  scheduleKnown,
+  announce,
+}: Props & { announce: (text: string) => void }) {
   const [phase, setPhase] = useState<Phase>(() =>
     solvedSeconds !== null
       ? { name: "solved", seconds: solvedSeconds, justNow: false }
@@ -59,7 +83,15 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
         ? { name: "starting" }
         : { name: "intro" },
   );
-  const [feedback, setFeedback] = useState<SubmitMessage | null>(null);
+  const [feedback, setFeedbackState] = useState<SubmitMessage | null>(null);
+  const repeat = useRef(false);
+  const setFeedback = (m: SubmitMessage | null) => {
+    setFeedbackState(m);
+    if (m) {
+      repeat.current = !repeat.current;
+      announce(m.text + (repeat.current ? " " : ""));
+    }
+  };
   const [pending, setPending] = useState(false);
   const [cooldownEnd, setCooldownEnd] = useState<number | null>(
     cooldownUntil ? new Date(cooldownUntil).getTime() : null,
@@ -112,6 +144,7 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
       });
     } else if (result.correct) {
       setPhase({ name: "solved", seconds: result.solve_seconds, justNow: true });
+      announce(`Treasure found! Solved in ${formatDuration(result.solve_seconds)}.`);
     } else {
       await coolFor(result.retry_in_seconds);
       setFeedback({ tone: "wrong", text: "Not quite. Check your answer and try again when the cooldown ends." });
@@ -136,7 +169,10 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
   if (phase.name === "starting") {
     return (
       <div className="card text-center text-muted" role="status">
-        Unrolling the map…
+        <span className="inline-flex items-center gap-3">
+          <Spinner />
+          Unrolling the map…
+        </span>
       </div>
     );
   }
@@ -197,6 +233,10 @@ function Solved({
   remaining: Remaining[];
   scheduleKnown: boolean;
 }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (justNow) heading.current?.focus();
+  }, [justNow]);
   const nextOpen = remaining.find((r) => r.state === "open");
 
   return (
@@ -205,7 +245,9 @@ function Solved({
       <div aria-hidden="true" className={`text-6xl leading-none ${justNow ? "animate-bounce" : ""}`}>
         💰
       </div>
-      <h2 className="font-display text-4xl text-gold">{justNow ? "Treasure found!" : "Already solved"}</h2>
+      <h2 ref={heading} tabIndex={-1} className="font-display text-4xl text-gold outline-none">
+        {justNow ? "Treasure found!" : "Already solved"}
+      </h2>
       <p className="text-lg">
         Solved in <strong className="font-mono text-gold">{formatDuration(seconds)}</strong>
       </p>
@@ -246,5 +288,14 @@ function Solved({
         <p className="text-sm text-muted">No other checkpoints are open right now. Check the list for new ones.</p>
       )}
     </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 text-gold motion-safe:animate-spin">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+      <path d="M21 12a9 9 0 0 0-9-9" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
   );
 }

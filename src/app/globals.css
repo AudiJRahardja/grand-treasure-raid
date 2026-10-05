@@ -35,6 +35,14 @@ body {
   color: var(--color-parchment);
 }
 
+/* A visible keyboard focus ring on everything interactive; components may restyle it */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
 @layer components {
   .btn {
     @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold transition

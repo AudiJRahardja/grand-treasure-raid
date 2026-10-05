@@ -23,8 +23,8 @@ export function SubmitButton({
     <div className="sticky bottom-0 z-20 -mx-4 border-t border-rope/70 bg-sea/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
       <div className="mx-auto flex w-full max-w-md flex-col gap-2">
         {message && (
+          // Announced by the page's live region (PuzzlePlayer), so no role="alert" here
           <p
-            role="alert"
             className={`rounded-lg border px-3 py-2 text-sm ${
               message.tone === "error" ? "border-danger/60 text-danger" : "border-gold/50 text-parchment"
             }`}
