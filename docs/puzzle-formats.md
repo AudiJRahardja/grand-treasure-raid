@@ -111,10 +111,17 @@ Example (`scripts/examples/crossmath.json`):
 
 Solution: `[8, 3, 5, 2, 9, 1, 6, 4, 7]`.
 
-**On the site**, the player taps a blank, then taps a number chip below the grid. Tapping a
-chip that's already placed moves it to the selected blank (swapping), and ⌫ takes a number
-back. A finished equation is outlined green if it's right and red if it's wrong. Submit
-unlocks once every blank is filled and nothing is red.
+**On the site:**
+
+- **Tap:** tap a blank, then tap a number chip below the grid. Tapping a chip that's
+  already placed moves it into the selected blank (swapping), and ⌫ Remove takes a number back.
+- **Drag:** drag a chip onto a blank. Dropping on a filled blank swaps: a tray number sends
+  the old one back to the tray, and a number from another blank trades places. Drag a placed
+  number to another blank to move it, or off the grid to return it to the tray. Dropping on
+  any other grid cell cancels.
+- **Keyboard:** Tab or the arrow keys select a blank, and Enter on a chip places it.
+- **Checking:** a finished equation is outlined green if it's right and red if it's wrong.
+  Submit unlocks once every blank is filled and nothing is red.
 
 ### Making a crossmath puzzle: `npm run make-crossmath`
 

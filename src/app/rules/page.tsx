@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { CROSSMATH_INSTRUCTIONS } from "@/games/crossmath/instructions";
 
 export const metadata: Metadata = { title: "Rules" };
 
@@ -24,7 +25,7 @@ export default function RulesPage() {
           <li>The raid runs for about two weeks. New checkpoints unlock on set dates during the run.</li>
           <li>Log in with Discord to play. Each checkpoint is one puzzle: a riddle, sudoku, queens or crossmath.</li>
           <li>
-            Crossmath: × and ÷ come before + and −, worked left to right. Every division must come out exact.
+            Crossmath: {CROSSMATH_INSTRUCTIONS}
           </li>
           <li>All dates and times are shown in WIB (Asia/Jakarta).</li>
         </ul>
