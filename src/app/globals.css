@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+/* Treasure map at night: deep sea background, parchment text, gold accents. */
+@theme {
+  --color-sea: #0b1820;
+  --color-deck: #122430;
+  --color-deck-raised: #1a3242;
+  --color-rope: #2f4b5c;
+  --color-parchment: #f1e6cc;
+  --color-muted: #a7b3b6;
+  --color-gold: #e6b54a;
+  --color-gold-strong: #f5ca62;
+  --color-danger: #f2786b;
+  --color-success: #6fd6a2;
+  --color-discord: #5865f2;
+
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+  --font-display: var(--font-pirate), Georgia, serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-sea);
+  /* Faint compass-grid, like a sea chart */
+  background-image:
+    radial-gradient(ellipse at top, rgb(230 181 74 / 0.08), transparent 60%),
+    linear-gradient(rgb(241 230 204 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(241 230 204 / 0.025) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px, 40px 40px;
+  background-attachment: fixed;
+  color: var(--color-parchment);
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 py-3 text-base font-semibold transition
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-gold text-sea hover:bg-gold-strong;
+  }
+  .btn-secondary {
+    @apply border border-rope bg-deck-raised text-parchment hover:border-gold/60;
+  }
+  .btn-discord {
+    @apply bg-discord text-white hover:brightness-110;
+  }
+  .card {
+    @apply rounded-2xl border border-rope bg-deck/90 p-4 shadow-lg shadow-black/20 sm:p-5;
+  }
+  .nav-link {
+    @apply inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-muted hover:text-parchment
+      focus-visible:outline-2 focus-visible:outline-gold;
+  }
+}
