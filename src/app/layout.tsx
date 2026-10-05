@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to content
         </a>
         <SiteHeader />
-        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-10">
+        <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-4 sm:py-10">
           {children}
         </main>
         <footer className="px-4 py-6 text-center text-xs text-muted">

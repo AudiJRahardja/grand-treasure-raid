@@ -8,12 +8,14 @@ import { GAMES } from "@/games/registry";
 import { getServerOffset, useServerNow } from "@/lib/server-clock";
 import { createClient } from "@/lib/supabase/client";
 import { formatDuration, formatWIB } from "@/lib/time";
+import type { SubmitMessage } from "@/games/types";
 import type { StartedPuzzle, SubmitResult } from "@/lib/types";
 
-export type NextCheckpoint =
-  | { kind: "open"; id: number; checkpoint: number }
-  | { kind: "locked"; checkpoint: number; opensAt: string }
-  | { kind: "none" };
+/** Another checkpoint of this event the player hasn't solved yet. */
+export type Remaining = { checkpoint: number } & (
+  | { state: "open"; id: number }
+  | { state: "locked"; opensAt: string }
+);
 
 type Props = {
   puzzleId: number;
@@ -21,7 +23,10 @@ type Props = {
   solvedSeconds: number | null;
   /** End of the current wrong-answer cooldown (ISO, server time), if any */
   cooldownUntil: string | null;
-  next: NextCheckpoint;
+  /** Unsolved checkpoints other than this one, in order */
+  remaining: Remaining[];
+  /** False if locked checkpoints couldn't be listed (schedule function missing) */
+  scheduleKnown: boolean;
 };
 
 type Phase =
@@ -30,8 +35,6 @@ type Phase =
   | { name: "playing"; puzzle: StartedPuzzle }
   | { name: "solved"; seconds: number; justNow: boolean }
   | { name: "error"; message: string };
-
-type Feedback = { tone: "wrong" | "cooldown" | "error"; text: string } | null;
 
 /** Turn RPC exceptions from start_puzzle / submit_answer into player-friendly text. */
 function friendlyError(message: string) {
@@ -48,7 +51,7 @@ async function startPuzzle(puzzleId: number): Promise<Phase> {
   return { name: "playing", puzzle: data as StartedPuzzle };
 }
 
-export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, next }: Props) {
+export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, remaining, scheduleKnown }: Props) {
   const [phase, setPhase] = useState<Phase>(() =>
     solvedSeconds !== null
       ? { name: "solved", seconds: solvedSeconds, justNow: false }
@@ -56,7 +59,7 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
         ? { name: "starting" }
         : { name: "intro" },
   );
-  const [feedback, setFeedback] = useState<Feedback>(null);
+  const [feedback, setFeedback] = useState<SubmitMessage | null>(null);
   const [pending, setPending] = useState(false);
   const [cooldownEnd, setCooldownEnd] = useState<number | null>(
     cooldownUntil ? new Date(cooldownUntil).getTime() : null,
@@ -150,13 +153,13 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
   }
 
   if (phase.name === "solved") {
-    return <Solved seconds={phase.seconds} justNow={phase.justNow} next={next} />;
+    return <Solved seconds={phase.seconds} justNow={phase.justNow} remaining={remaining} scheduleKnown={scheduleKnown} />;
   }
 
   const game = GAMES[phase.puzzle.type];
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between rounded-xl border border-rope bg-deck-raised px-4 py-3">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between rounded-xl border border-rope bg-deck-raised px-4 py-2">
         <span className="text-sm text-muted">Your time</span>
         <span className="font-mono text-xl text-gold" aria-live="off">
           <ElapsedTimer from={phase.puzzle.opened_at} />
@@ -176,29 +179,30 @@ export function PuzzlePlayer({ puzzleId, started, solvedSeconds, cooldownUntil, 
           puzzleId={puzzleId}
           data={phase.puzzle.data}
           onSubmit={handleSubmit}
-          submit={{ pending, cooldownLeft }}
+          submit={{ pending, cooldownLeft, message: feedback }}
         />
-      )}
-
-      {feedback && (
-        <p
-          role="alert"
-          className={`rounded-xl border p-3 text-sm ${
-            feedback.tone === "error" ? "border-danger/60 text-danger" : "border-gold/50 text-parchment"
-          }`}
-        >
-          {feedback.tone === "wrong" && <span aria-hidden="true">✖ </span>}
-          {feedback.text}
-        </p>
       )}
     </div>
   );
 }
 
-function Solved({ seconds, justNow, next }: { seconds: number; justNow: boolean; next: NextCheckpoint }) {
+function Solved({
+  seconds,
+  justNow,
+  remaining,
+  scheduleKnown,
+}: {
+  seconds: number;
+  justNow: boolean;
+  remaining: Remaining[];
+  scheduleKnown: boolean;
+}) {
+  const nextOpen = remaining.find((r) => r.state === "open");
+
   return (
-    <div className="card flex flex-col items-center gap-4 border-gold/60 text-center">
-      <div aria-hidden="true" className={`text-6xl ${justNow ? "animate-bounce" : ""}`}>
+    <div className="card flex flex-col items-center gap-4 border-gold/60 pt-8 text-center sm:pt-10">
+      {/* Room above for the bounce so the icon never touches the card edge */}
+      <div aria-hidden="true" className={`text-6xl leading-none ${justNow ? "animate-bounce" : ""}`}>
         💰
       </div>
       <h2 className="font-display text-4xl text-gold">{justNow ? "Treasure found!" : "Already solved"}</h2>
@@ -207,9 +211,9 @@ function Solved({ seconds, justNow, next }: { seconds: number; justNow: boolean;
       </p>
 
       <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-center">
-        {next.kind === "open" && (
-          <Link href={`/puzzles/${next.id}`} className="btn btn-primary">
-            Next: Checkpoint {next.checkpoint} →
+        {nextOpen?.state === "open" && (
+          <Link href={`/puzzles/${nextOpen.id}`} className="btn btn-primary">
+            Next: Checkpoint {nextOpen.checkpoint} →
           </Link>
         )}
         <Link href="/leaderboard" className="btn btn-secondary">
@@ -220,12 +224,27 @@ function Solved({ seconds, justNow, next }: { seconds: number; justNow: boolean;
         </Link>
       </div>
 
-      {next.kind === "locked" && (
-        <p className="text-sm text-muted">
-          Checkpoint {next.checkpoint} opens {formatWIB(next.opensAt)} (in <Countdown to={next.opensAt} />)
-        </p>
+      {remaining.length > 0 ? (
+        <ul className="flex flex-col gap-1 text-sm text-muted">
+          {remaining.map((r) => (
+            <li key={r.checkpoint}>
+              {r.state === "open" ? (
+                <Link href={`/puzzles/${r.id}`} className="underline underline-offset-4 hover:text-parchment">
+                  Checkpoint {r.checkpoint} is still waiting for you
+                </Link>
+              ) : (
+                <>
+                  Checkpoint {r.checkpoint} opens {formatWIB(r.opensAt)} (in <Countdown to={r.opensAt} />)
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : scheduleKnown ? (
+        <p className="text-sm text-muted">That was the last checkpoint. Well sailed!</p>
+      ) : (
+        <p className="text-sm text-muted">No other checkpoints are open right now. Check the list for new ones.</p>
       )}
-      {next.kind === "none" && <p className="text-sm text-muted">That was the last checkpoint. Well sailed!</p>}
     </div>
   );
 }

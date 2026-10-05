@@ -17,7 +17,7 @@ export async function SiteHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-rope/70 bg-sea/90 backdrop-blur">
+    <header className="z-40 border-b border-rope/70 bg-sea/90 backdrop-blur sm:sticky sm:top-0">
       <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-x-2 px-4 py-2">
         <Link href="/" className="mr-auto flex min-h-11 items-center gap-2 font-display text-xl text-gold sm:text-2xl">
           <span aria-hidden="true">🗺️</span> Treasure Raid

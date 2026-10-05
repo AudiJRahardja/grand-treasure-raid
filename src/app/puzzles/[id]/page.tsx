@@ -7,7 +7,7 @@ import { logQuery } from "@/lib/debug";
 import { createClient } from "@/lib/supabase/server";
 import { formatWIB } from "@/lib/time";
 import { COOLDOWN_SECONDS, PUZZLE_COLUMNS, type ProgressRow, type PuzzleMeta, type ScheduleRow } from "@/lib/types";
-import { PuzzlePlayer, type NextCheckpoint } from "./PuzzlePlayer";
+import { PuzzlePlayer, type Remaining } from "./PuzzlePlayer";
 
 export const metadata: Metadata = { title: "Checkpoint" };
 
@@ -39,7 +39,7 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
     );
   }
 
-  const [nowRes, eventRes, progressRes, lastWrongRes, laterRes, scheduleRes] = await Promise.all([
+  const [nowRes, eventRes, progressRes, lastWrongRes, openRes, solvedRes, scheduleRes] = await Promise.all([
     supabase.rpc("server_now"),
     supabase.from("events").select("id, name, ends_at").eq("id", puzzle.event_id).single(),
     supabase
@@ -60,18 +60,19 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
       .from("puzzles")
       .select("id, checkpoint_number")
       .eq("event_id", puzzle.event_id)
-      .gt("checkpoint_number", puzzle.checkpoint_number)
       .order("checkpoint_number", { ascending: true }),
+    supabase.from("progress").select("puzzle_id").eq("user_id", userId).not("solved_at", "is", null),
     supabase.rpc("checkpoint_schedule", { p_event_id: puzzle.event_id }),
   ]);
   logQuery("rpc server_now()", nowRes);
   logQuery(`events where id=${puzzle.event_id}`, eventRes);
   logQuery(`progress (own) where puzzle_id=${puzzleId}`, progressRes);
   logQuery("submissions (own) last wrong", lastWrongRes);
-  logQuery("puzzles (id, checkpoint_number) later in event", laterRes);
+  logQuery("puzzles (id, checkpoint_number) open in event", openRes);
+  logQuery("progress (own) solved puzzle ids", solvedRes);
   logQuery(`rpc checkpoint_schedule(${puzzle.event_id})`, scheduleRes);
 
-  const error = nowRes.error ?? eventRes.error ?? progressRes.error ?? lastWrongRes.error ?? laterRes.error;
+  const error = nowRes.error ?? eventRes.error ?? progressRes.error ?? lastWrongRes.error ?? openRes.error ?? solvedRes.error;
   if (error) return <Failed message={error.message} />;
 
   const now = new Date(nowRes.data as string).getTime();
@@ -84,10 +85,11 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
   const cooldownEnd = lastWrong ? new Date(lastWrong.submitted_at).getTime() + COOLDOWN_SECONDS * 1000 : 0;
   const cooldownUntil = cooldownEnd > now ? new Date(cooldownEnd).toISOString() : null;
 
-  const next = nextCheckpoint(
-    puzzle.checkpoint_number,
-    (laterRes.data ?? []) as { id: number; checkpoint_number: number }[],
-    // If the schedule function is missing, just don't show locked ones
+  const remaining = remainingCheckpoints(
+    puzzle.id,
+    (openRes.data ?? []) as { id: number; checkpoint_number: number }[],
+    new Set(((solvedRes.data ?? []) as { puzzle_id: number }[]).map((p) => p.puzzle_id)),
+    // If the schedule function is missing, locked checkpoints just aren't listed
     scheduleRes.error ? [] : ((scheduleRes.data ?? []) as ScheduleRow[]),
   );
 
@@ -108,33 +110,37 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
           started={progress !== null}
           solvedSeconds={solved ? (progress?.solve_seconds ?? 0) : null}
           cooldownUntil={cooldownUntil}
-          next={next}
+          remaining={remaining}
+          scheduleKnown={!scheduleRes.error}
         />
       )}
     </Page>
   );
 }
 
-function nextCheckpoint(
-  current: number,
-  laterOpen: { id: number; checkpoint_number: number }[],
+/** Every checkpoint of the event except this one that the player hasn't solved. */
+function remainingCheckpoints(
+  currentId: number,
+  open: { id: number; checkpoint_number: number }[],
+  solvedIds: Set<number>,
   schedule: ScheduleRow[],
-): NextCheckpoint {
-  const nextNumber = [...laterOpen.map((p) => p.checkpoint_number), ...schedule.map((s) => s.checkpoint_number)]
-    .filter((n) => n > current)
-    .sort((a, b) => a - b)[0];
-  if (nextNumber === undefined) return { kind: "none" };
-
-  const open = laterOpen.find((p) => p.checkpoint_number === nextNumber);
-  if (open) return { kind: "open", id: open.id, checkpoint: nextNumber };
-
-  const locked = schedule.find((s) => s.checkpoint_number === nextNumber)!;
-  return { kind: "locked", checkpoint: nextNumber, opensAt: locked.opens_at };
+): Remaining[] {
+  const openNumbers = new Set(open.map((p) => p.checkpoint_number));
+  const result: Remaining[] = [
+    ...open
+      .filter((p) => p.id !== currentId && !solvedIds.has(p.id))
+      .map((p): Remaining => ({ state: "open", id: p.id, checkpoint: p.checkpoint_number })),
+    // In the schedule but not readable yet = still locked
+    ...schedule
+      .filter((s) => !openNumbers.has(s.checkpoint_number))
+      .map((s): Remaining => ({ state: "locked", checkpoint: s.checkpoint_number, opensAt: s.opens_at })),
+  ];
+  return result.sort((a, b) => a.checkpoint - b.checkpoint);
 }
 
 function Page({ puzzle, eventName, children }: { puzzle?: PuzzleMeta; eventName?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3 sm:gap-5">
       <header>
         {puzzle && (
           <p className="text-xs uppercase tracking-wide text-muted">
@@ -142,7 +148,7 @@ function Page({ puzzle, eventName, children }: { puzzle?: PuzzleMeta; eventName?
             {eventName && ` · ${eventName}`}
           </p>
         )}
-        <h1 className="font-display text-4xl text-gold">{puzzle?.title ?? "Checkpoint"}</h1>
+        <h1 className="font-display text-3xl text-gold sm:text-4xl">{puzzle?.title ?? "Checkpoint"}</h1>
       </header>
       {children}
     </div>

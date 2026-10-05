@@ -19,8 +19,8 @@ export function LeaderboardTable({ rows, userId }: { rows: LeaderboardRow[]; use
             <th scope="col" className="w-px whitespace-nowrap py-3 pl-3 pr-1 text-center sm:pl-4">#</th>
             <th scope="col" className="w-full px-2 py-3">Player</th>
             <th scope="col" className="hidden w-px whitespace-nowrap px-2 py-3 text-right sm:table-cell">Solved</th>
-            <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-right">Points</th>
-            <th scope="col" className="w-px whitespace-nowrap py-3 pl-2 pr-3 text-right sm:pr-4">Time</th>
+            <th scope="col" className="w-px whitespace-nowrap px-2 py-3 text-right sm:px-4">Points</th>
+            <th scope="col" className="w-px whitespace-nowrap py-3 pl-2 pr-3 text-right sm:pl-10 sm:pr-5">Time</th>
           </tr>
         </thead>
         <tbody>
@@ -48,8 +48,8 @@ export function LeaderboardTable({ rows, userId }: { rows: LeaderboardRow[]; use
                   </span>
                 </td>
                 <td className="hidden px-2 py-3 text-right tabular-nums sm:table-cell">{r.solved_count}</td>
-                <td className="px-2 py-3 text-right font-semibold tabular-nums">{r.total_points}</td>
-                <td className="whitespace-nowrap py-3 pl-2 pr-3 text-right font-mono text-sm tabular-nums sm:pr-4">
+                <td className="px-2 py-3 text-right font-semibold tabular-nums sm:px-4">{r.total_points}</td>
+                <td className="whitespace-nowrap py-3 pl-2 pr-3 text-right font-mono text-sm tabular-nums sm:pl-10 sm:pr-5">
                   {formatDuration(r.total_seconds)}
                 </td>
               </tr>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import { SubmitButton } from "../SubmitButton";
 import { defineGame, type GameProps } from "../types";
 import { useSavedState } from "../useSavedState";
@@ -15,6 +15,7 @@ const EMPTY = 0;
 const MARK = 1;
 const QUEEN = 2;
 type Board = number[][];
+type Cell = [number, number];
 
 // Light region colours so the dark queen and × stay readable on every one
 const REGION_COLORS = [
@@ -48,7 +49,7 @@ type Check = {
 };
 
 function checkBoard(board: Board, regions: number[][]): Check {
-  const queens: [number, number][] = [];
+  const queens: Cell[] = [];
   board.forEach((row, r) => row.forEach((v, c) => v === QUEEN && queens.push([r, c])));
 
   const badQueens = new Set<string>();
@@ -75,6 +76,19 @@ function checkBoard(board: Board, regions: number[][]): Check {
   return { badQueens, ...result, count: queens.length };
 }
 
+const setCell = (b: Board, r: number, c: number, v: number) =>
+  b.map((row, ri) => (ri === r ? row.map((old, ci) => (ci === c ? v : old)) : row));
+
+/** In-progress press on the board: a tap if it never leaves its square, otherwise a drag. */
+type Drag = {
+  pointerId: number;
+  start: Cell;
+  /** Drag from empty paints ×, from × erases ×, from a queen does nothing */
+  mode: "mark" | "unmark" | null;
+  moved: boolean;
+  lastKey: string;
+};
+
 function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
   const { size: n, regions } = data;
   const emptyBoard = () => Array.from({ length: n }, () => new Array<number>(n).fill(EMPTY));
@@ -86,18 +100,74 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
       saved.length === n &&
       saved.every((row) => Array.isArray(row) && row.length === n && row.every((v) => v === EMPTY || v === MARK || v === QUEEN)),
   );
-  const [focus, setFocus] = useState<[number, number]>([0, 0]);
+  const [focus, setFocus] = useState<Cell>([0, 0]);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<Drag | null>(null);
 
   const check = useMemo(() => checkBoard(board, regions), [board, regions]);
   const allGood = check.rowsOk && check.colsOk && check.regionsOk && check.touchOk;
   const solved = check.count === n && allGood;
 
-  function cycle(r: number, c: number) {
-    setBoard((b) => b.map((row, ri) => (ri === r ? row.map((v, ci) => (ci === c ? (v + 1) % 3 : v)) : row)));
+  /** Tap: empty → × → queen → empty */
+  function cycle([r, c]: Cell) {
+    setBoard((b) => setCell(b, r, c, (b[r][c] + 1) % 3));
+  }
+
+  /** Drag paint: only ever touches × marks, never a queen */
+  function paint([r, c]: Cell, mode: "mark" | "unmark") {
+    setBoard((b) => {
+      const v = b[r][c];
+      if (mode === "mark" && v === EMPTY) return setCell(b, r, c, MARK);
+      if (mode === "unmark" && v === MARK) return setCell(b, r, c, EMPTY);
+      return b;
+    });
+  }
+
+  function cellAt(x: number, y: number): Cell | null {
+    const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-queens-cell]");
+    if (!el || !boardRef.current?.contains(el)) return null;
+    return [Number(el.dataset.r), Number(el.dataset.c)];
+  }
+
+  function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (!e.isPrimary || e.button !== 0) return;
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell) return;
+    // Keep receiving moves and the release even if the pointer leaves the board
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const v = board[cell[0]][cell[1]];
+    drag.current = {
+      pointerId: e.pointerId,
+      start: cell,
+      mode: v === EMPTY ? "mark" : v === MARK ? "unmark" : null,
+      moved: false,
+      lastKey: `${cell}`,
+    };
+    setFocus(cell);
+  }
+
+  function handlePointerMove(e: PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const cell = cellAt(e.clientX, e.clientY);
+    if (!cell || `${cell}` === d.lastKey) return;
+    d.lastKey = `${cell}`;
+    if (!d.moved) {
+      d.moved = true;
+      if (d.mode) paint(d.start, d.mode);
+    }
+    if (d.mode) paint(cell, d.mode);
+  }
+
+  function handlePointerUp(e: PointerEvent<HTMLDivElement>) {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    drag.current = null;
+    if (!d.moved) cycle(d.start);
   }
 
   function handleKeyDown(e: KeyboardEvent, r: number, c: number) {
-    const moves: Record<string, [number, number]> = {
+    const moves: Record<string, Cell> = {
       ArrowUp: [-1, 0],
       ArrowDown: [1, 0],
       ArrowLeft: [0, -1],
@@ -114,6 +184,7 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!solved) return;
+    // Only queens count; × marks are never sent
     onSubmit(board.map((row) => row.indexOf(QUEEN)));
   }
 
@@ -123,19 +194,25 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
 
   // Thick dark line wherever the neighbouring cell is in another region
   const edge = (same: boolean) => (same ? "1px solid rgb(11 24 32 / 0.25)" : "3px solid #0b1820");
+  const tracks = `repeat(${n}, minmax(0, 1fr))`;
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <p className="text-center text-sm text-muted">
-        Place one queen in every row, column and colour region. Queens can&apos;t touch, not even diagonally. Tap a
-        square once for ×, twice for a queen, three times to clear.
+        One queen per row, column and colour. Queens can&apos;t touch, even diagonally. Tap: × → queen → clear.
+        Drag to mark many ×.
       </p>
 
       <div
+        ref={boardRef}
         role="grid"
         aria-label={`Queens board, ${n} by ${n}. Use arrow keys to move and Enter to change a square.`}
-        className="mx-auto grid aspect-square w-full max-w-md overflow-hidden rounded-lg border-[3px] border-sea"
-        style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}
+        className="mx-auto grid aspect-square w-full max-w-md touch-none overflow-hidden rounded-lg border-[3px] border-sea select-none"
+        style={{ gridTemplateColumns: tracks, gridTemplateRows: tracks }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => (drag.current = null)}
       >
         {board.map((row, r) =>
           row.map((v, c) => {
@@ -148,14 +225,15 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
                 id={`queens-${r}-${c}`}
                 type="button"
                 role="gridcell"
+                data-queens-cell=""
+                data-r={r}
+                data-c={c}
                 tabIndex={focus[0] === r && focus[1] === c ? 0 : -1}
                 aria-label={`Row ${r + 1}, column ${c + 1}, region ${region + 1}: ${label}${bad ? ", breaks a rule" : ""}`}
-                onClick={() => {
-                  setFocus([r, c]);
-                  cycle(r, c);
-                }}
+                // Pointer taps are handled on the board; this only handles Enter/Space (detail 0)
+                onClick={(e) => e.detail === 0 && cycle([r, c])}
                 onKeyDown={(e) => handleKeyDown(e, r, c)}
-                className={`relative flex items-center justify-center outline-none focus-visible:z-10 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-sea ${
+                className={`relative aspect-square min-h-0 min-w-0 overflow-hidden p-0 outline-none focus-visible:z-10 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-sea ${
                   bad ? "ring-4 ring-inset ring-red-600" : ""
                 }`}
                 style={{
@@ -164,19 +242,18 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
                   borderLeft: c > 0 ? edge(regions[r][c - 1] === region) : undefined,
                 }}
               >
-                {v === QUEEN && <Crown className={`h-3/5 w-3/5 ${bad ? "text-red-700" : "text-sea"}`} />}
-                {v === MARK && (
-                  <span aria-hidden="true" className="text-lg font-bold text-sea/60 sm:text-xl">
-                    ×
-                  </span>
-                )}
+                {/* Absolutely positioned so content can never change the cell's size */}
+                <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  {v === QUEEN && <Crown className={`h-[60%] w-[60%] ${bad ? "text-red-700" : "text-sea"}`} />}
+                  {v === MARK && <span className="text-lg leading-none font-bold text-sea/60">×</span>}
+                </span>
               </button>
             );
           }),
         )}
       </div>
 
-      <ul className="mx-auto grid w-full max-w-md grid-cols-2 gap-x-3 gap-y-1 text-sm" aria-live="polite">
+      <ul className="mx-auto grid w-full max-w-md grid-cols-2 gap-x-3 gap-y-0.5 text-sm" aria-live="polite">
         <Rule ok={check.rowsOk} text="One per row" />
         <Rule ok={check.colsOk} text="One per column" />
         <Rule ok={check.regionsOk} text="One per region" />
@@ -187,19 +264,16 @@ function Queens({ puzzleId, data, onSubmit, submit }: GameProps<QueensData>) {
         <span>
           {check.count}/{n} queens
         </span>
-        <button type="button" onClick={clearAll} className="nav-link">
+        <button type="button" onClick={clearAll} className="nav-link min-h-9">
           Clear
         </button>
       </div>
 
-      <div className="mx-auto w-full max-w-md">
-        <SubmitButton submit={submit} disabled={!solved} />
-        {!solved && (
-          <p className="mt-2 text-center text-xs text-muted">
-            Place all {n} queens without breaking a rule to submit.
-          </p>
-        )}
-      </div>
+      <SubmitButton
+        submit={submit}
+        disabled={!solved}
+        hint={`Place all ${n} queens without breaking a rule to submit.`}
+      />
     </form>
   );
 }

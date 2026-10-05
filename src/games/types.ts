@@ -6,7 +6,11 @@ export type SubmitState = {
   pending: boolean;
   /** Seconds until the cooldown ends (0 = can submit) */
   cooldownLeft: number;
+  /** Result of the last attempt ("Not quite…", cooldown, error), shown in the submit bar */
+  message: SubmitMessage | null;
 };
+
+export type SubmitMessage = { tone: "wrong" | "cooldown" | "error"; text: string };
 
 /** Every game component receives exactly this. */
 export type GameProps<D> = {
