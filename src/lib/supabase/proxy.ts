@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./env";
 
 /** Paths that require a logged-in player. */
-const PROTECTED_PREFIXES = ["/puzzles", "/leaderboard"];
+const PROTECTED_PREFIXES = ["/puzzles", "/leaderboard", "/verify"];
 
 /**
  * Refreshes the Supabase session cookie on every request and sends

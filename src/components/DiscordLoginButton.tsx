@@ -3,7 +3,20 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-export function DiscordLoginButton({ next = "/puzzles" }: { next?: string }) {
+/**
+ * Supabase always asks Discord for "identify email"; we add "guilds.members.read"
+ * so the server can check BGDC membership (Discord then receives
+ * "email identify guilds.members.read").
+ */
+const EXTRA_SCOPES = "guilds.members.read";
+
+export function DiscordLoginButton({
+  next = "/puzzles",
+  label = "Login with Discord",
+}: {
+  next?: string;
+  label?: string;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,7 +27,7 @@ export function DiscordLoginButton({ next = "/puzzles" }: { next?: string }) {
     const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "discord",
-      options: { redirectTo, scopes: "identify" },
+      options: { redirectTo, scopes: EXTRA_SCOPES },
     });
     // On success the browser navigates away to Discord
     if (error) {
@@ -27,7 +40,7 @@ export function DiscordLoginButton({ next = "/puzzles" }: { next?: string }) {
     <div className="flex flex-col items-center gap-2">
       <button type="button" onClick={login} disabled={pending} className="btn btn-discord w-full sm:w-auto">
         <DiscordIcon />
-        {pending ? "Opening Discord…" : "Login with Discord"}
+        {pending ? "Opening Discord…" : label}
       </button>
       {error && (
         <p role="alert" className="text-sm text-danger">

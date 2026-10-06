@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { membershipBlock } from "@/components/MembershipGate";
 import { ErrorNotice, InfoNotice } from "@/components/Notice";
 import { logQuery } from "@/lib/debug";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +21,9 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims.sub as string | undefined;
   if (!userId) redirect(`/login?next=/puzzles/${puzzleId}`);
+
+  const blocked = await membershipBlock(supabase, `/puzzles/${puzzleId}`);
+  if (blocked) return <Page>{blocked}</Page>;
 
   // RLS hides puzzles that haven't opened yet
   const puzzleRes = await supabase.from("puzzles").select(PUZZLE_COLUMNS).eq("id", puzzleId).maybeSingle();

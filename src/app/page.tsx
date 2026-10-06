@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Countdown } from "@/components/Countdown";
 import { DiscordLoginButton } from "@/components/DiscordLoginButton";
+import { membershipBlock } from "@/components/MembershipGate";
 import { ErrorNotice } from "@/components/Notice";
 import { logQuery } from "@/lib/debug";
 import { getCurrentEvent } from "@/lib/events";
@@ -55,6 +56,7 @@ function PublicIntro() {
 async function EventIntro() {
   const supabase = await createClient();
   const current = await getCurrentEvent(supabase);
+  const blocked = await membershipBlock(supabase, "/");
 
   if (!current.ok) {
     return (
@@ -114,7 +116,7 @@ async function EventIntro() {
       )}
       {!event && <p className="text-muted">No raid is scheduled yet. Watch Discord for the next one!</p>}
 
-      <GoButton ended={status === "ended"} />
+      {blocked ? <div className="w-full max-w-md">{blocked}</div> : <GoButton ended={status === "ended"} />}
     </>
   );
 }

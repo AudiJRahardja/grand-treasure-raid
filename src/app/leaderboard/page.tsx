@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { membershipBlock } from "@/components/MembershipGate";
 import { ErrorNotice, InfoNotice } from "@/components/Notice";
 import { logQuery } from "@/lib/debug";
 import { getCurrentEvent } from "@/lib/events";
@@ -15,6 +16,9 @@ export default async function LeaderboardPage() {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims.sub as string | undefined;
   if (!userId) redirect("/login?next=/leaderboard");
+
+  const blocked = await membershipBlock(supabase, "/leaderboard");
+  if (blocked) return <Shell>{blocked}</Shell>;
 
   const current = await getCurrentEvent(supabase);
   if (!current.ok) {

@@ -25,6 +25,12 @@ export default function RulesPage() {
           <li>The raid runs for about two weeks. New checkpoints unlock on set dates during the run.</li>
           <li>Log in with Discord to play. Each checkpoint is one puzzle: a riddle, sudoku, queens or crossmath.</li>
           <li>
+            The raid is for members of the <strong>BGDC Discord server</strong>. That&apos;s why Discord&apos;s login
+            screen also asks to let the site <em>read your membership in servers</em>. We use it only to check
+            you&apos;re in BGDC, each time you log in. We can&apos;t see your messages or other servers, and we
+            don&apos;t keep your Discord token. A check lasts 21 days, so log in again if the site asks.
+          </li>
+          <li>
             Crossmath: {CROSSMATH_INSTRUCTIONS}
           </li>
           <li>All dates and times are shown in WIB (Asia/Jakarta).</li>

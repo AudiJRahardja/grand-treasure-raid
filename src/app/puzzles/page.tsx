@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Countdown } from "@/components/Countdown";
+import { membershipBlock } from "@/components/MembershipGate";
 import { ErrorNotice, InfoNotice } from "@/components/Notice";
 import { logQuery } from "@/lib/debug";
 import { getCurrentEvent, type EventStatus } from "@/lib/events";
@@ -21,6 +22,9 @@ export default async function PuzzlesPage() {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims.sub as string | undefined;
   if (!userId) redirect("/login?next=/puzzles");
+
+  const blocked = await membershipBlock(supabase, "/puzzles");
+  if (blocked) return <Shell>{blocked}</Shell>;
 
   const current = await getCurrentEvent(supabase);
   if (!current.ok) {

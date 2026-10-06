@@ -42,6 +42,8 @@ function friendlyError(message: string) {
   if (/not available/i.test(message))
     return "This checkpoint isn't available. It may not be open yet, or the raid has ended.";
   if (/start the puzzle first/i.test(message)) return "Press Start before submitting.";
+  if (/not a verified bgdc member/i.test(message))
+    return "Your BGDC membership check has run out. Reload the page and log in again to re-verify.";
   return message;
 }
 

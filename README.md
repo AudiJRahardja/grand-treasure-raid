@@ -51,10 +51,16 @@ Paste each into a new query and click **Run**, one after the other:
 |---|---|
 | `001_checkpoint_schedule.sql` | Lets the checkpoint list show locked checkpoints ("Checkpoint 2, opens …"). |
 | `002_hardening.sql` | Display names must be 1–32 characters, the signup trigger always produces a valid name, and stored answers are capped at 4000 bytes. |
+| `003_guild_membership.sql` | Only verified members of the BGDC Discord server can see puzzles, play, and see or appear on the leaderboard. Players can no longer rename themselves. |
 
-**Don't skip this step.** Neither file is part of `schema.sql`. Without 001, the checkpoint
-list shows an "Upcoming unlock times unavailable" error. Without 002, names and answers
-have no size limits. Both files are safe to re-run. When a new migration is added later,
+**Don't skip this step.** None of these files are part of `schema.sql`:
+
+- **Without 001:** the checkpoint list shows an "Upcoming unlock times unavailable" error.
+- **Without 002:** names and answers have no size limits.
+- **Without 003:** anyone with a Discord account can play. The site's login code also
+  expects the 003 functions.
+
+All three files are safe to re-run. When a new migration is added later,
 run just that file on your existing project.
 
 ### 4. Create the Discord application
@@ -70,6 +76,15 @@ run just that file on your existing project.
    ```
    The exact URL is shown as "Callback URL" on Supabase's Discord provider page (next step).
    Click **Save Changes**.
+4. There's nothing else to set up here. The membership check uses the standard
+   `guilds.members.read` login scope, which needs no bot, no approval and no privileged
+   intents. On the login screen, Discord tells players the site can "read your member info"
+   for servers.
+5. Get the **BGDC server ID** for step 7:
+   1. In the Discord app, open **User Settings** → **Advanced** and turn on **Developer Mode**.
+   2. Right-click the BGDC server icon → **Copy Server ID**.
+
+   Also create a non-expiring invite link for players who aren't in the server yet.
 
 ### 5. Enable the Discord provider in Supabase
 
@@ -99,23 +114,42 @@ npm install
 cp .env.example .env.local        # Windows PowerShell: copy .env.example .env.local
 ```
 
-Open `.env.local` and fill in both values from Supabase **Project Settings** → **API**
-(or **API Keys**):
+Open `.env.local` and fill in the values:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<the anon / publishable key>
+SUPABASE_SECRET_KEY=<the secret key, sb_secret_…>
+DISCORD_GUILD_ID=<the BGDC server ID from step 4>
+NEXT_PUBLIC_DISCORD_INVITE_URL=<optional: the BGDC invite link>
 ```
 
-Use only the **anon** (a.k.a. publishable) key. **Never** use the `service_role` or secret
-key: this app runs in players' browsers, and that key bypasses every security rule.
+| Variable | Where it comes from | Who sees it |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase **Project Settings** → **API Keys**: the Project URL and the **anon / publishable** key | Players' browsers. That's fine, because the database rules protect everything. |
+| `SUPABASE_SECRET_KEY` | Same page: the **secret** key (`sb_secret_…`). On older projects, use the legacy `service_role` key. | **Server only.** |
+| `DISCORD_GUILD_ID` | Step 4 | Server only (not secret) |
+| `NEXT_PUBLIC_DISCORD_INVITE_URL` | Your invite link (optional) | Players |
+
+About `SUPABASE_SECRET_KEY`:
+
+- It bypasses every security rule. The site uses it in exactly one server-only file
+  (`src/lib/supabase/admin.ts`), only to record membership checks.
+- **Never** give it a `NEXT_PUBLIC_` prefix, never paste it into browser code, and never
+  commit it.
 
 ```bash
 npm run dev
 ```
 
 Open http://localhost:3000 and click **Login with Discord**. After you approve, you should
-land on `/puzzles` with your Discord name in the header.
+land on `/puzzles` with your Discord name in the header:
+
+- **In the BGDC server:** you see the checkpoints.
+- **Not in the server:** you see "Join the BGDC Discord to play".
+
+The terminal also prints `[auth] … contains provider_token: no` (dev only). That confirms
+Discord's token wasn't saved in your login cookie.
 
 To try every puzzle type, load the test data. **Only on a test project, or delete it
 before a real event** (see [Test data](#test-data)):
@@ -138,10 +172,13 @@ git push -u origin main
 
 1. On vercel.com: **Add New…** → **Project** → import your GitHub repository. The framework
    (Next.js) is detected automatically.
-2. Under **Environment Variables**, add the same two values as `.env.local`, for
-   Production and Preview:
+2. Under **Environment Variables**, add the same values as `.env.local`, for Production
+   and Preview:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SECRET_KEY`: tick **Sensitive**, so it can't be viewed again after saving
+   - `DISCORD_GUILD_ID`
+   - `NEXT_PUBLIC_DISCORD_INVITE_URL` (optional)
 3. Click **Deploy**.
 4. Back in Supabase, **Authentication** → **URL Configuration**:
    - Set **Site URL** to your Vercel address, e.g. `https://treasure-raid.vercel.app`.
@@ -207,6 +244,11 @@ that are printed in this repository.
   - Check with `npm run build && npm start`, browsing a few pages. The terminal shows no
     `[supabase]` lines.
   - Vercel's runtime logs should show none either.
+- [ ] **Membership check:** migration 003 is run, and `SUPABASE_SECRET_KEY` (Sensitive) and
+      `DISCORD_GUILD_ID` are set on Vercel.
+  - A server member can play.
+  - A Discord account outside the server sees "Join the BGDC Discord to play".
+  - **Everyone who logged in before 003 must log in once more** to be checked. Announce this.
 - [ ] **Prizes:** edit the text at the top of `src/app/rules/page.tsx`.
 - [ ] **Times:** the Rules page and the event's dates say what you'll announce in Discord.
 
@@ -265,6 +307,47 @@ reports both problems.
 That's by design. The one-minute cooldown after a wrong answer applies across all
 checkpoints.
 
+**"Couldn't check, try again" after logging in (with a code)**
+The site couldn't get an answer from Discord, so it doesn't treat you as a non-member.
+
+| Code | Meaning | Fix |
+|---|---|---|
+| `discord-unavailable` | Discord error, rate limit or a 6-second timeout | Try again in a minute. |
+| `not-configured` | `DISCORD_GUILD_ID` or `SUPABASE_SECRET_KEY` is missing or malformed | Set both. On Vercel, redeploy afterwards. |
+| `record-failed` | The database refused the check | Make sure 003 has been run, and that `SUPABASE_SECRET_KEY` is the secret / service_role key, not the anon key. |
+| `no-token` | Supabase didn't pass Discord's token through | Log in again. |
+| `account-mismatch` / `no-discord-identity` | The Discord account doesn't match the login | Log out, then log in again. |
+
+**Everyone sees "Join the BGDC Discord to play," even members**
+`DISCORD_GUILD_ID` is wrong. Discord gives the same "not found" answer for a wrong server ID
+as for "not in the server". Copy the ID again (step 4) and redeploy. Then log in again,
+because a login records a fresh check.
+
+### Testing membership without Discord
+
+There's no bypass switch. To test, write a check yourself in the SQL Editor, which runs as an
+admin. Find your user id under **Authentication** → **Users**.
+
+```sql
+-- Make me a member (valid for 21 days from now)
+insert into public.guild_members (user_id, discord_id, is_member, checked_at)
+values ('<user id>', 'manual-test', true, now())
+on conflict (user_id) do update set is_member = true, checked_at = now();
+
+-- See the "Join the BGDC Discord" notice
+update public.guild_members set is_member = false where user_id = '<user id>';
+
+-- See "Log in again to re-verify" (check older than 21 days)
+update public.guild_members set is_member = true, checked_at = now() - interval '22 days'
+where user_id = '<user id>';
+
+-- See it with no check at all
+delete from public.guild_members where user_id = '<user id>';
+```
+
+Reload the page after each change. Logging in again replaces a manual row with Discord's
+real answer.
+
 ## How it's secured
 
 The database does the enforcing. The site only holds the public anon key.
@@ -276,6 +359,13 @@ The database does the enforcing. The site only holds the public anon key.
   `select *` on `puzzles` is refused.
 - **Progress and submissions:** players can read only their own rows. All writes happen
   inside the two functions, which also enforce the cooldown and use the database clock.
+- **BGDC members only:** puzzles, playing and the leaderboard require a membership check
+  from the last 21 days.
+  - The site's server asks Discord at each login and records the answer through
+    `record_guild_check`. Only the secret key can call it, and it refuses a Discord id that
+    isn't the player's own.
+  - Players can read their own check but can't write any.
+  - Discord's token is used once on the server and isn't saved in the login cookie.
 - **Logged-out visitors** are redirected away from `/puzzles`, `/puzzles/[id]` and
   `/leaderboard`, and the database refuses them anyway.
 
