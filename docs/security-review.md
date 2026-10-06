@@ -40,13 +40,16 @@ suggestions; each needs a database change, so none has been made.
    logged-in player. The site uses it to highlight your own row. UUIDs aren't credentials,
    so the risk is low.
    *Option:* replace `user_id` in the view with `(pr.user_id = auth.uid()) as is_me`.
-2. **Display names have no length or content limit.** Players can rename themselves through
+2. **✅ Fixed by `migrations/002_hardening.sql`.** Names must now be 1–32 characters, and
+   signup always produces a valid name. Content isn't checked; React escapes names when they
+   are shown. *Original finding:* **display names had no length or content limit.** Players can rename themselves through
    the API (`grant update (display_name)`), even though the site has no rename screen, and the
    name shows on the leaderboard. A very long or offensive name is possible. The leaderboard
    wraps long names safely.
    *Option:* a check constraint such as
    `char_length(btrim(display_name)) between 1 and 32`.
-3. **`submit_answer` stores any answer JSON, whatever its size,** in `submissions`. The
+3. **✅ Fixed by `migrations/002_hardening.sql`.** New attempts over 4000 bytes are
+   refused. *Original finding:* **`submit_answer` stored any answer JSON, whatever its size,** in `submissions`. The
    one-minute cooldown limits the rate of wrong attempts, but not their size.
    *Option:* at the top of `submit_answer`, reject answers over a few KB
    (`if pg_column_size(p_answer) > 8192 then raise exception 'Answer too large'; end if;`).

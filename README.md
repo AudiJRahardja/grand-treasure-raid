@@ -45,12 +45,17 @@ second time fails because the tables already exist.
 
 ### 3. Run every file in `supabase/migrations/`, in number order
 
-Right now that's only `001_checkpoint_schedule.sql`. Paste it into a new query and click
-**Run**.
+Paste each into a new query and click **Run**, one after the other:
 
-**Don't skip this step.** `checkpoint_schedule` isn't in `schema.sql`. Without it, the
-checkpoint list can't show locked checkpoints ("Checkpoint 2, opens …"). It shows an
-"Upcoming unlock times unavailable" error instead.
+| File | What it adds |
+|---|---|
+| `001_checkpoint_schedule.sql` | Lets the checkpoint list show locked checkpoints ("Checkpoint 2, opens …"). |
+| `002_hardening.sql` | Display names must be 1–32 characters, the signup trigger always produces a valid name, and stored answers are capped at 4000 bytes. |
+
+**Don't skip this step.** Neither file is part of `schema.sql`. Without 001, the checkpoint
+list shows an "Upcoming unlock times unavailable" error. Without 002, names and answers
+have no size limits. Both files are safe to re-run. When a new migration is added later,
+run just that file on your existing project.
 
 ### 4. Create the Discord application
 
@@ -242,6 +247,8 @@ hand:
 ```sql
 update public.profiles set display_name = 'New Name' where id = '<user id>';
 ```
+
+Names must be 1–32 characters (migration 002).
 
 The user id is in **Authentication** → **Users**.
 
