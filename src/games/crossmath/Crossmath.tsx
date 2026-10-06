@@ -461,4 +461,20 @@ function Crossmath({ puzzleId, data, onSubmit, submit }: GameProps<CrossmathData
   );
 }
 
-export const crossmath = defineGame({ isData: isCrossmathData, Component: Crossmath });
+export const crossmath = defineGame({
+  isData: isCrossmathData,
+  Component: Crossmath,
+  guide: {
+    goal: "Use each number once so every row and column equation is true.",
+    rules: [
+      "× and ÷ come before + and −, worked left to right.",
+      "Every division must come out exact, with no fractions at any step.",
+      "A finished equation turns green when it's right and red when it's wrong.",
+    ],
+    controls: [
+      "Tap a blank, then tap a number below the grid, or drag a number onto a blank.",
+      "Drop a number on a filled blank to swap. Drag a placed number to another blank to move it, or off the grid to put it back.",
+      "Keyboard: arrow keys move between blanks. Tab to a number and press Enter to place it.",
+    ],
+  },
+});

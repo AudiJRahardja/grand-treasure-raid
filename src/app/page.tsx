@@ -10,7 +10,7 @@ import { formatWIB } from "@/lib/time";
 import type { ScheduleRow } from "@/lib/types";
 
 const DESCRIPTION =
-  "A puzzle hunt for our Discord crew. New checkpoints unlock over two weeks: riddles, sudoku, queens and crossmath. Solve them fast to climb the leaderboard and claim the treasure.";
+  "A puzzle hunt for our Discord crew. New checkpoints unlock over two weeks. Solve them fast to climb the leaderboard and claim the treasure.";
 
 export default async function Home() {
   const supabase = await createClient();

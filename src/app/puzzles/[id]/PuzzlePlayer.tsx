@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Countdown, ElapsedTimer } from "@/components/Countdown";
 import { ErrorNotice } from "@/components/Notice";
+import { GameGuide, HowToPlay } from "@/games/GameGuide";
 import { GAMES } from "@/games/registry";
 import { getServerOffset, useServerNow } from "@/lib/server-clock";
 import { createClient } from "@/lib/supabase/client";
@@ -19,6 +20,8 @@ export type Remaining = { checkpoint: number } & (
 
 type Props = {
   puzzleId: number;
+  /** puzzles.type, readable once the checkpoint has unlocked; picks the guide */
+  type: string;
   started: boolean;
   solvedSeconds: number | null;
   /** End of the current wrong-answer cooldown (ISO, server time), if any */
@@ -71,6 +74,7 @@ export function PuzzlePlayer(props: Props) {
 
 function PlayerPhases({
   puzzleId,
+  type,
   started,
   solvedSeconds,
   cooldownUntil,
@@ -153,10 +157,21 @@ function PlayerPhases({
     }
   }
 
+  const guide = GAMES[type]?.guide;
+
   if (phase.name === "intro") {
     return (
       <div className="card flex flex-col gap-4 text-center">
         <p className="text-lg">Ready, captain?</p>
+        {/* Read the guide before starting: the timer isn't running yet */}
+        {guide && (
+          <section aria-labelledby="guide-heading" className="rounded-xl border border-rope bg-deck-raised p-4">
+            <h2 id="guide-heading" className="mb-2 text-left font-display text-2xl text-gold">
+              How to play
+            </h2>
+            <GameGuide guide={guide} />
+          </section>
+        )}
         <p className="text-sm text-muted">
           Your timer starts the moment you press <strong className="text-parchment">Start puzzle</strong>, and it
           keeps running even if you leave or reload the page. Faster solves rank higher.
@@ -197,11 +212,12 @@ function PlayerPhases({
   const game = GAMES[phase.puzzle.type];
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between rounded-xl border border-rope bg-deck-raised px-4 py-2">
+      <div className="flex items-center gap-3 rounded-xl border border-rope bg-deck-raised px-4 py-1.5">
         <span className="text-sm text-muted">Your time</span>
-        <span className="font-mono text-xl text-gold" aria-live="off">
+        <span className="ml-auto font-mono text-xl text-gold" aria-live="off">
           <ElapsedTimer from={phase.puzzle.opened_at} />
         </span>
+        {guide && <HowToPlay guide={guide} />}
       </div>
 
       {!game ? (

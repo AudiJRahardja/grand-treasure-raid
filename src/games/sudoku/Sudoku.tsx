@@ -275,4 +275,19 @@ function Sudoku({ puzzleId, data, onSubmit, submit }: GameProps<SudokuData>) {
   );
 }
 
-export const sudoku = defineGame({ isData: isSudokuData, Component: Sudoku });
+export const sudoku = defineGame({
+  isData: isSudokuData,
+  Component: Sudoku,
+  guide: {
+    goal: "Fill the grid so every row, every column and every 3×3 box holds the digits 1 to 9 exactly once.",
+    rules: [
+      "Bold numbers are given and can't be changed.",
+      "Numbers that clash turn red. Submit unlocks once the grid is full with no clashes.",
+    ],
+    controls: [
+      "Tap a square, then a number on the pad. ⌫ erases.",
+      "Turn on ✎ Notes to pencil in small candidates. Notes are never submitted, and placing a number clears that note from its row, column and box.",
+      "Keyboard: arrow keys move, 1–9 fill a square, Backspace erases, N turns notes on or off.",
+    ],
+  },
+});

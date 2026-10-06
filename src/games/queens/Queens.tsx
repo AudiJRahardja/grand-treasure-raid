@@ -299,4 +299,19 @@ function Crown({ className }: { className: string }) {
   );
 }
 
-export const queens = defineGame({ isData: isQueensData, Component: Queens });
+export const queens = defineGame({
+  isData: isQueensData,
+  Component: Queens,
+  guide: {
+    goal: "Place exactly one queen in every row, every column and every colour region.",
+    rules: [
+      "No two queens may touch, not even diagonally.",
+      "A queen that breaks a rule gets a red ring, and the checklist under the board shows which rule.",
+    ],
+    controls: [
+      "Tap a square once for ×, twice for a queen, three times to clear it. × marks are only notes for you and are never submitted.",
+      "Press and drag across squares to mark many × at once. Start on an empty square to add ×, or on an × to remove them. Dragging never touches a queen.",
+      "Keyboard: arrow keys move, Enter or Space changes a square.",
+    ],
+  },
+});

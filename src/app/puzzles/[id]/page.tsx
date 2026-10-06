@@ -111,6 +111,7 @@ export default async function PuzzlePage(props: PageProps<"/puzzles/[id]">) {
       ) : (
         <PuzzlePlayer
           puzzleId={puzzle.id}
+          type={puzzle.type}
           started={progress !== null}
           solvedSeconds={solved ? (progress?.solve_seconds ?? 0) : null}
           cooldownUntil={cooldownUntil}

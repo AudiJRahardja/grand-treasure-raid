@@ -11,8 +11,11 @@ Each puzzle row has a `type`. The site picks the game component for that type fr
 
 ## Adding a new game type
 
-1. Create `src/games/<type>/<Name>.tsx`. Export `defineGame({ isData, Component })`:
+1. Create `src/games/<type>/<Name>.tsx`. Export `defineGame({ isData, Component, guide })`:
    - `isData(data)` checks the JSON shape at runtime.
+   - `guide` is the "How to play" text: `goal`, `rules` and `controls`. It appears on the
+     Start screen and behind the "How to play" button. It's the only place the type's rules are
+     described, so the public pages never reveal which puzzle types exist.
    - `Component` receives `{ puzzleId, data, onSubmit, submit }` and calls `onSubmit(answerJson)`.
    - Use the shared `<SubmitButton submit={submit} />` so the cooldown display stays consistent.
    - Optional: `useSavedState("<type>:" + puzzleId, ...)` keeps in-progress work across reloads.

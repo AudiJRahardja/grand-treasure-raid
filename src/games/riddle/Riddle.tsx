@@ -44,4 +44,15 @@ function Riddle({ data, onSubmit, submit }: GameProps<RiddleData>) {
   );
 }
 
-export const riddle = defineGame({ isData: isRiddleData, Component: Riddle });
+export const riddle = defineGame({
+  isData: isRiddleData,
+  Component: Riddle,
+  guide: {
+    goal: "Work out the answer to the riddle.",
+    rules: [
+      "Capital letters and extra spaces don't matter.",
+      "A wrong answer starts the one-minute cooldown, so think before you submit.",
+    ],
+    controls: ["Type your answer, then press Submit answer (or Enter)."],
+  },
+});

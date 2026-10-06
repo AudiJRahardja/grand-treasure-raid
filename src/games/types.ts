@@ -23,10 +23,25 @@ export type GameProps<D> = {
   submit: SubmitState;
 };
 
+/**
+ * How to play one puzzle type. Shown on the Start screen (before the timer
+ * runs) and behind the "How to play" button during play. It's written next to
+ * the game's registration, so it only appears once that type of puzzle unlocks.
+ */
+export type GameGuide = {
+  /** One sentence: what solving it means */
+  goal: string;
+  /** The puzzle's rules */
+  rules: string[];
+  /** Tap, drag and keyboard controls */
+  controls: string[];
+};
+
 export type GameDefinition<D> = {
   /** Runtime check that the puzzle's `data` has the documented shape */
   isData: (data: unknown) => data is D;
   Component: ComponentType<GameProps<D>>;
+  guide: GameGuide;
 };
 
 /** Erases the data type so definitions can live in one registry map. */
