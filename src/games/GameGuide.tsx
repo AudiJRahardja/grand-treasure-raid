@@ -62,7 +62,7 @@ export function HowToPlay({ guide }: { guide: Guide }) {
         onClose={() => setOpen(false)}
         // Clicking the dimmed backdrop (the dialog element itself) closes it
         onClick={(e) => e.target === e.currentTarget && dialog.current?.close()}
-        className="m-auto max-h-[85dvh] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-rope bg-deck p-5 text-parchment shadow-2xl backdrop:bg-black/70"
+        className="sheet m-auto max-h-[85dvh] w-[min(28rem,calc(100%-2rem))] overflow-y-auto rounded-2xl border border-rope bg-deck p-5 text-parchment shadow-2xl"
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 id={`${id}-title`} className="font-display text-2xl text-gold">

@@ -164,7 +164,7 @@ function PuzzleCard({ puzzle, progress, ended }: { puzzle: PuzzleMeta; progress?
   return (
     <Link
       href={`/puzzles/${puzzle.id}`}
-      className="card flex min-h-20 items-center gap-4 transition hover:border-gold/60 focus-visible:outline-2 focus-visible:outline-gold"
+      className="card card-link flex min-h-20 items-center gap-4 focus-visible:outline-2 focus-visible:outline-gold"
     >
       <CheckpointBadge n={puzzle.checkpoint_number} />
       <span className="min-w-0 flex-1">

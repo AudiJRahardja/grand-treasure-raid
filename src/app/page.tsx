@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CompassMark } from "@/components/CompassMark";
 import { Countdown } from "@/components/Countdown";
 import { DiscordLoginButton } from "@/components/DiscordLoginButton";
 import { membershipBlock } from "@/components/MembershipGate";
@@ -19,16 +20,10 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col items-center gap-8 py-6 text-center sm:py-10">
-      <div aria-hidden="true" className="text-6xl">
-        🗺️
-      </div>
+      <CompassMark className="h-16 w-16 text-gold drop-shadow-[0_0_24px_rgb(230_181_74/0.35)]" />
       {loggedIn ? <EventIntro /> : <PublicIntro />}
 
-      <ul className="grid w-full max-w-md gap-3 text-left text-sm sm:grid-cols-3 sm:text-center">
-        <Step icon="🔓" text="Checkpoints unlock on set dates" />
-        <Step icon="⏱️" text="Your timer starts when you press Start" />
-        <Step icon="🏆" text="Most points, fastest time wins" />
-      </ul>
+      <Route />
 
       <Link href="/rules" className="text-sm text-gold underline underline-offset-4">
         Read the full rules
@@ -42,7 +37,7 @@ function PublicIntro() {
   return (
     <>
       <div className="flex flex-col gap-3">
-        <h1 className="font-display text-5xl text-gold sm:text-6xl">The Grand Treasure Raid</h1>
+        <h1 className="font-display text-5xl leading-[0.95] tracking-tight text-gold sm:text-7xl">The Grand Treasure Raid</h1>
         <p className="mx-auto max-w-md text-muted">{DESCRIPTION}</p>
       </div>
       <div className="flex w-full max-w-xs flex-col gap-2">
@@ -133,13 +128,33 @@ function GoButton({ ended = false }: { ended?: boolean }) {
   );
 }
 
-function Step({ icon, text }: { icon: string; text: string }) {
+const ROUTE = [
+  { title: "Checkpoints unlock on set dates", body: "Each one shows a countdown until it opens." },
+  { title: "Your timer starts when you press Start", body: "Read the puzzle's guide first. The clock only runs once you begin." },
+  { title: "Most points, fastest time wins", body: "Ties go to whoever finished first. Results are announced in Discord." },
+];
+
+/** How the raid works, drawn as a route on the map: numbered stops on a dashed trail. */
+function Route() {
   return (
-    <li className="flex items-center gap-3 rounded-xl border border-rope bg-deck/70 p-3 sm:flex-col sm:gap-1">
-      <span aria-hidden="true" className="text-2xl">
-        {icon}
-      </span>
-      <span>{text}</span>
-    </li>
+    <section aria-labelledby="route-heading" className="w-full max-w-sm text-left">
+      <h2 id="route-heading" className="sr-only">
+        How the raid works
+      </h2>
+      <ol className="relative flex flex-col gap-6">
+        <span aria-hidden="true" className="absolute top-5 bottom-5 left-[19px] border-l-2 border-dashed border-gold/30" />
+        {ROUTE.map((stop, i) => (
+          <li key={stop.title} className="relative flex gap-4">
+            <span className="z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 border-gold/70 bg-sea font-display text-xl text-gold">
+              {i + 1}
+            </span>
+            <div className="pt-1">
+              <p className="font-semibold text-parchment">{stop.title}</p>
+              <p className="mt-0.5 text-sm text-muted">{stop.body}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
